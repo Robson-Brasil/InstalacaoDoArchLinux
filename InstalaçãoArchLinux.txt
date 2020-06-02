@@ -1,0 +1,235 @@
+Instalação passo a passo do Arch Linux em Modo UEFI
+
+1- Configure o layout do teclado ( padrão US )
+loadkeys br-abnt2
+
+Ou você pode usar o novo padrão:
+localectl set-x11-keymap br abnt2
+
+2 - Para saber se você inciciou o CD/USB em modo UEFI, veja se o seguinte diretório está preenchido
+ls /sys/firmware/efi/efivars
+
+3 - Atualize o relógio do sistema
+Use timedatectl para garantir que o relógio do sistema esteja certo:
+timedatectl set-ntp true
+
+4 - Se você está usando uma rede cabeada, faça o teste de conexão para saber se tem internet
+ping -c 3 archlinux.org
+Conexão de rede com fio e acesso a um servidor DHCP (ex. roteador) (Está opção é iniciada automaticamente)
+dhcpcd
+
+5 - Se você estiver usando WiFi deve seguir alguns procedimentos, no meu caso o wifi do meu notebook estava bloqueado pelo modulo RFKILL
+    Verificar se está bloqueada
+rfkill list
+    0: phy0: Wireless LAN
+        Soft blocked: yes
+        Hard blocked: yes
+Para desbloquear basta digitar
+rfkill unblock wifi
+
+6 - Localizar a rede wifi
+wifi-menu
+
+7 - Preparação do HDD/SSD
+
+Primeiro vamos verificar o disco usando o comando
+
+lsblk ( ele vai listar o HDD e todas as partições existentes nele )
+( aconselho que, no próximo tópico, você apague toda as partições pré-exixstentes)
+
+8 - Ferramentas para particionar os discos
+parted: GPT and MBR
+fdisk, cfdisk, sfdisk: GPT and MBR
+gdisk, cgdisk, sgdisk: GPT
+
+(Recomendo utilizar uma dessas ferramentas: gdisk e cfdisk)
+
+Pode utilizar também o fdisk e cfdisk
+CFDISK e CGDISK talvez sejam mais fáceis de configurar.
+
+Utilizo a /home separada e o meu disco ficará assim
+    (Supondo que seja um HD de 1TB)
+    
+    /dev/sda1 ( 1G para o /boot/efi )
+    /dev/sda2 ( 350G para / )
+    /dev/sda3 ( 647G para o /home )
+    /dev/sda4 ( 2GB para swap )
+
+Dentro do cfdisk, use as setas para cima e para baixo para selecionar uma partição ou trecho de espaço livre e as setas para a direita e esquerda para navegar entre as opções, que incluem:
+
+Delete: Deletar uma partição, transformando-a em espaço livre. Use esta opção para deletar partições já existentes no HD para poder criar novas.
+
+Create: Cria uma partição usando um trecho de espaço livre. O assistente perguntará sobre o tamanho da partição, em megabytes. Você terá ainda a opção de criar uma partição primária e uma partição extendida.
+
+Você pode criar no máximo de quatro partições primárias, uma limitação que vem desde o PC-XT. Mas, por outro lado pode criar até 255 partições extendidas. Todas as versões do Windows e do DOS exigem que sejam instaladas numa partição primária, mas no Linux não existe esta limitação.
+
+Você pode criar quantas partições for necessário e instalar o Kurumin em qual delas preferir.
+
+Maximize: Redimensiona uma partição, para que ela ocupe todo o espaço disponível no HD. O processo não é destrutivo, pois o sistema simplesmente adiciona o espaço adicional no final da partição, sem mexer no que está gravado, mas de qualquer forma é sempre saudável fazer um backup.
+
+Type: Altera o sistema de arquivos da partição (Linux, FAT, Linux Swap, etc.). Lembre-se de que você deve ter no mínimo uma partição Linux e outra Linux Swap.
+
+Bootable: Esta é mais uma opção necessária para partições do Windows ou DOS, mas não para o Linux. Mas a regra básica é que ao usar várias partições, a partição onde o sistema operacional está instalado seja marcada com este atributo.
+
+Write: Salva as alterações.
+
+Quit: Depois de fazer as alterações necessárias e salvar, só falta sair do programa ;-).
+
+Lembre de fazer o cfdisk escrever=( WRITE ) as partições e de marcar a partição que receberá o GRUB (no meu caso a /dev/sda1/ como BIOS bootavel em “type”) 
+    
+9 - Formatação das partições criadas
+mkfs.fat -F32 /dev/sda1
+mkfs.ext4 /dev/sda2 
+mkfs.ext4 /dev/sda3
+mkswap /dev/sda4
+
+10 - Montagens das partições formatadas
+mount /dev/sda2 /mnt
+    mkdir /mnt/home
+    mkdir /mnt/boot
+    mkdir /mnt/boot/efi (se for usar EUFI)
+mount /dev/sda3 /mnt/home
+mount /dev/sda1 /mnt/boot/efi
+swapon /dev/sda4
+
+11 - Instale o sistema base
+Nota: Um sistema mínimo exige o pacote do grupo base, também a instalação do grupo de pacote base-devel neste momento é altamente recomendado.
+pacstrap /mnt base base-devel linux linux-firmware
+
+12 - Gerar o fstab
+Gere o fstab com o script genfstab (se preferir adicione a opção -U (UUIDs) ou -L (labels), respectivamente).
+genfstab -U /mnt >> /mnt/etc/fstab
+
+13 - Sempre verificar se se o arquivo foi gerado e não contém erros
+cat /mnt/etc/fstab
+
+14 - Chroot no sistema
+Faremos um chroot dentro de nosso sistema recém-instalado.
+arch-chroot /mnt
+    Nota: Se você esqueceu de instalar pacotes com o script pacstrap, pode instalá-los após o chroot com:
+    pacman -S <pacote>
+
+15 - Alterando a hora e data
+ln -sf /usr/share/zoneinfo/Região/Cidade /etc/localtime
+hwclock --systohc
+
+16 - Vamos agora alterar o idioma do sistema, alterando o arquivo locale.gen, faça isso descomentando a linha “pt_BR.UTF-8 UTF-8” "pt_BR ISO-8859-1" com o comando:
+vim /etc/locale.gen
+
+17 - Não esqueça de gerar o arquivo
+locale-gen
+
+18 - Agora, podemos configurar a variável de linguagem em "locale.conf"
+echo LANG=pt_BR.UTF-8 >> /etc/locale.conf
+
+19 - Se você preferir usar o teclado com o layout abnt2
+echo KEYMAP=br-abnt2 >> /etc/vconsole.conf
+
+20 - Criando um nome de HOSTNAME
+vim /etc/hostname
+    (eu esolhi archlinux) pode ser o nome que você quiser, mas não o esqueça, será necessário no próximo passo
+    
+21 - Vamos editar o arquivo HOSTS
+vim /etc/hosts
+Dentro desse arquivo adicione:
+
+127.0.0.1   localhost.localdomain   localhost
+::1         localhost.localdomain   localhost
+127.0.1.1   HOSTNAMEESCOLHIDO.localdomain  HOSTNAMEESCOLHIDO
+
+21 - Criaremos agora a senha para o seu usuário root:
+passwd
+
+22 - Criar o usuário do sistema
+useradd -m -g users -G wheel nome_desejado_para_o_usuario
+
+23 - Criar a senha para o usuário de sistema
+passwd digiteaquionomedousuariocriadono tópico 22
+
+24 - Vamos isntalar pacotes adicionais para facilitar mais ainda
+pacman -S wpa_supplicant wireless_tools networkmanager modemmanager mobile-broadband-provider-info usb_modeswitch rp-pppoe nm-connection-editor network-manager-applet dosfstools os-prober mtools dialog sudo base-devel linux-headers wget
+
+25 - Caso você já tenha criado outro usuário, e tenha instalado o “sudo” como eu fiz, é preciso adicionar o seu usuário dentro do arquivo “sudoers”:
+vim /etc/sudoers
+
+26 - Na linha User privileges especification, logo abaixo de root acrescente
+seunomedeusuario ALL=(ALL) ALL
+
+27 - Instalação do GRUB
+pacman -S grub-efi-x86_64 efibootmgr
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=grub --recheck
+cp /usr/share/locale/en@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
+
+Gerar o arquivo de configurações do Boot:
+grub-mkconfig -o /boot/grub/grub.cfg
+
+28 - Uhuuuu, se não ocorreram erros, parabéns
+umount -a
+exit
+reboot
+
+29 - Logue no sistema 
+root
+senha
+
+30 - Aqui tive problemas com o Wi-Fi segui esses passos e funcionou
+systemctl start NetworkManager.service
+systemctl enable NetworkManager.service
+systemctl disable dhcpcd.service
+systemctl start wpa_supplicant.service
+systemctl enable wpa_supplicant.service
+reboot
+
+nmcli device wifi list (Verificas as redes disponiveis)
+nmcli device wifi connect NOMEDASUAREDE password DIGITEASENHA
+
+31 - Atualizar os repósitorios do ARCH
+pacman -Sy
+
+32 - Instalar o XORG
+pacman -S xorg-server xd86-input-mouse xf86-input-keyboard xorg-xinit
+
+33 - Meu notebook é com placas híbirdas intel/nvidia e essa parte está sendo complicada
+
+Instalar agora os drivers de vídeo:
+
+Intel
+pacman -S xf86-video-intel libgl mesa
+
+Nvidia
+pacman -S nvidia nvidia-libgl mesa
+
+AMD
+pacman -S mesa xf86-video-amdgpu
+
+34 - Daqui por diante, depende um pouco do que você vai querer instalar como interface, se vai ser GNOME, KDE Plasma, XFCE, etc.
+
+GNOME
+
+pacman -S gdm
+systemctl enable gdm
+pacman -S gnome gnome-terminal nautilus gnome-tweaks gnome-control-center gnome-backgrounds adwaita-icon-theme gnome-extra 
+
+
+KDE Plasma
+
+pacman -S sddm
+systemctl enable sddm
+pacman -S plasma konsole dolphin
+
+XFCE (instalado com GDM ou SDDM)
+pacman -S xfce4 xfce4-goodies xfce4-terminal
+
+CINNAMON
+pacman -S lightdm lightdm-gtk-greeter lighdm-gtk-greeter-settings
+systemclt enable lightdm.service
+sudo pacman -S cinnamon system-config-priner gnome-keyring gnome-terminal blueberry cups
+sudo systemctl start org.cups.cupsd.service
+sudo systemctl start bluetooth
+sudo systemctl enable org.cups.cupsd.service
+sudo systemctl enable bluetooth
+
+
+
+35 - Espere e depois seja FELIZ
+
